@@ -6,121 +6,107 @@ import plotly.express as px
 st.set_page_config(page_title="Blockchain Decision Dashboard", layout="wide")
 
 # -----------------------------
-# FETCH LIVE DATA (CoinGecko)
+# LOAD DATA (SAFE)
 # -----------------------------
 @st.cache_data
 def load_data():
     url = "https://api.coingecko.com/api/v3/coins/markets"
-    params = {
-        "vs_currency": "usd",
-        "order": "market_cap_desc",
-        "per_page": 20,
-        "page": 1
-    }
-    data = requests.get(url, params=params).json()
+    params = {"vs_currency":"usd","order":"market_cap_desc","per_page":15,"page":1}
+    try:
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json()
+        df = pd.DataFrame(data)
+        return df[["name","current_price","market_cap","total_volume","price_change_percentage_24h","image"]]
+    except:
+        return pd.DataFrame([
+            ["Ethereum",1800,200000000000,10000000000,2.5,"https://cryptologos.cc/logos/ethereum-eth-logo.png"],
+            ["Bitcoin",30000,600000000000,20000000000,1.2,"https://cryptologos.cc/logos/bitcoin-btc-logo.png"],
+            ["Solana",150,60000000000,5000000000,3.1,"https://cryptologos.cc/logos/solana-sol-logo.png"]
+        ], columns=["name","current_price","market_cap","total_volume","price_change_percentage_24h","image"])
 
-    df = pd.DataFrame(data)[[
-        "name","symbol","current_price","market_cap","total_volume","price_change_percentage_24h","image"
-    ]]
-    return df
-
-df_live = load_data()
+df = load_data()
 
 # -----------------------------
-# MANUAL BLOCKCHAIN DATA (REALISTIC)
+# EXTRA INFO
 # -----------------------------
 info = {
-    "Ethereum": {"SmartContracts":1,"WalletUI":"Metamask","Use":"Apps & DeFi"},
-    "Bitcoin": {"SmartContracts":0,"WalletUI":"Basic Wallet","Use":"Money"},
-    "Solana": {"SmartContracts":1,"WalletUI":"Phantom","Use":"Fast Apps"},
-    "Cardano": {"SmartContracts":1,"WalletUI":"Daedalus","Use":"Secure Apps"},
-    "Polkadot": {"SmartContracts":1,"WalletUI":"Polkadot.js","Use":"Connect Chains"},
-    "Avalanche": {"SmartContracts":1,"WalletUI":"Core Wallet","Use":"DeFi"},
-    "Polygon": {"SmartContracts":1,"WalletUI":"Metamask","Use":"Scaling"},
-    "TRON": {"SmartContracts":1,"WalletUI":"TronLink","Use":"Content"},
-    "Tezos": {"SmartContracts":1,"WalletUI":"Temple","Use":"Governance"},
-    "BNB": {"SmartContracts":1,"WalletUI":"Trust Wallet","Use":"DeFi"}
+    "Ethereum": ["Yes","MetaMask","Apps & DeFi"],
+    "Bitcoin": ["No","Basic Wallet","Payments"],
+    "Solana": ["Yes","Phantom","Fast Apps"]
 }
 
-# Merge logic
-df_live["SmartContracts"] = df_live["name"].map(lambda x: info.get(x, {}).get("SmartContracts",1))
-df_live["Wallet"] = df_live["name"].map(lambda x: info.get(x, {}).get("WalletUI","Generic"))
-df_live["Use"] = df_live["name"].map(lambda x: info.get(x, {}).get("Use","General"))
+df["SmartContracts"] = df["name"].map(lambda x: info.get(x,["Yes","Generic","General"])[0])
+df["Wallet"] = df["name"].map(lambda x: info.get(x,["Yes","Generic","General"])[1])
+df["Use"] = df["name"].map(lambda x: info.get(x,["Yes","Generic","General"])[2])
 
 # -----------------------------
 # TITLE
 # -----------------------------
-st.title("🚀 Blockchain Decision Dashboard (Real Data)")
+st.title("🚀 Blockchain Comparison Dashboard")
+
+st.markdown("Compare blockchain platforms visually and choose the best based on your needs.")
 
 # -----------------------------
-# SIMPLE EXPLANATION (FOR NON-TECH USERS)
+# SELECT
 # -----------------------------
-st.info("""
-💡 This dashboard helps you choose a blockchain:
-- Speed → How fast transactions happen  
-- Market Cap → How big & trusted it is  
-- Volume → How actively used it is  
-""")
+selected = st.multiselect("Select Blockchains", df["name"], default=df["name"][:3])
+df_sel = df[df["name"].isin(selected)]
 
 # -----------------------------
-# FILTER
-# -----------------------------
-selected = st.multiselect("Compare Blockchains", df_live["name"].head(10), default=["Ethereum","Bitcoin"])
-
-compare_df = df_live[df_live["name"].isin(selected)]
-
-# -----------------------------
-# CARDS (VISUAL)
+# CARDS UI
 # -----------------------------
 st.subheader("🔍 Overview")
 
-cols = st.columns(len(compare_df))
+cols = st.columns(len(df_sel))
 
-for i, row in compare_df.iterrows():
-    with cols[i % len(compare_df)]:
-        st.image(row["image"], width=80)
-        st.write(f"### {row['name']}")
-        st.write(f"💰 Price: ${row['current_price']}")
-        st.write(f"📊 Market Cap: {row['market_cap']:,}")
-        st.write(f"📈 24h Change: {row['price_change_percentage_24h']:.2f}%")
-        st.write(f"📜 Smart Contracts: {'Yes' if row['SmartContracts'] else 'No'}")
-        st.write(f"👛 Wallet: {row['Wallet']}")
-        st.caption(f"Use: {row['Use']}")
+for i, row in df_sel.iterrows():
+    with cols[i % len(df_sel)]:
+        st.image(row["image"], width=70)
+        st.markdown(f"### {row['name']}")
+        st.write(f"💰 ${row['current_price']}")
+        st.write(f"📊 Cap: {row['market_cap']:,}")
+        st.write(f"📈 24h: {row['price_change_percentage_24h']:.2f}%")
+        st.progress(min(row["total_volume"]/1e10,1.0))
 
 # -----------------------------
-# COMPARISON GRAPH (REAL DATA)
+# COMPARISON MATRIX (IMPORTANT)
 # -----------------------------
-st.subheader("📊 Market Comparison")
+st.subheader("📊 Side-by-Side Comparison")
 
-fig = px.bar(compare_df, x="name", y="market_cap", color="name")
+st.dataframe(df_sel.set_index("name"), use_container_width=True)
+
+# -----------------------------
+# GRAPH
+# -----------------------------
+st.subheader("📊 Market Cap Comparison")
+
+fig = px.bar(df_sel, x="name", y="market_cap", color="name")
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# SMART CONTRACT VISUAL (DIFFERENT PER PLATFORM)
+# SMART CONTRACT VISUAL
 # -----------------------------
-st.subheader("📜 Smart Contract Capability")
+st.subheader("📜 Smart Contracts")
 
-for _, row in compare_df.iterrows():
-    if row["SmartContracts"] == 1:
-        st.success(f"{row['name']} → Supports smart contracts (apps, DeFi)")
+for _, row in df_sel.iterrows():
+    if row["SmartContracts"] == "Yes":
+        st.success(f"{row['name']} supports smart contracts → Apps, DeFi")
     else:
-        st.error(f"{row['name']} → No smart contracts (only payments)")
+        st.error(f"{row['name']} does NOT support smart contracts")
 
 # -----------------------------
-# WALLET VISUAL (REALISTIC)
+# WALLET UI MOCK
 # -----------------------------
-st.subheader("👛 Wallet Experience")
+st.subheader("👛 Wallet Simulation")
 
-wallet = st.selectbox("Choose Wallet Type", compare_df["Wallet"].unique())
+wallet = st.selectbox("Select Wallet", df_sel["Wallet"].unique())
 
 st.markdown(f"""
-### {wallet}
+### {wallet} Wallet
 
-- Send / Receive crypto  
-- Connect to apps  
-- Sign transactions securely  
-
-🔐 Simulated UI:
+- Connect  
+- Sign transaction  
+- Send crypto  
 """)
 
 amount = st.slider("Amount",1,100,10)
@@ -129,25 +115,24 @@ if st.button("Send Transaction"):
     st.success(f"{amount} tokens sent using {wallet} ✅")
 
 # -----------------------------
-# SMART RECOMMENDATION
+# RECOMMENDATION
 # -----------------------------
-st.subheader("🤖 Recommendation Engine")
+st.subheader("🤖 Recommendation")
 
-goal = st.selectbox("Your Goal", ["Investment","Fast Transactions","Apps/Smart Contracts"])
+goal = st.selectbox("Goal", ["Investment","Speed","Apps"])
 
-if st.button("Get Recommendation"):
+if st.button("Get Best"):
     if goal == "Investment":
-        best = df_live.sort_values("market_cap", ascending=False).iloc[0]
-    elif goal == "Fast Transactions":
-        best = df_live.sort_values("total_volume", ascending=False).iloc[0]
+        best = df_sel.sort_values("market_cap", ascending=False).iloc[0]
+    elif goal == "Speed":
+        best = df_sel.sort_values("total_volume", ascending=False).iloc[0]
     else:
-        best = df_live[df_live["SmartContracts"]==1].iloc[0]
+        best = df_sel[df_sel["SmartContracts"]=="Yes"].iloc[0]
 
     st.success(f"Best Choice: {best['name']}")
-    st.write("Based on real market data + usage")
 
 # -----------------------------
 # DARK MODE
 # -----------------------------
 if st.toggle("🌙 Dark Mode"):
-    st.markdown("<style>body {background-color:#0e1117;color:white;}</style>", unsafe_allow_html=True)
+    st.markdown("<style>body {background:#0e1117;color:white}</style>", unsafe_allow_html=True)
