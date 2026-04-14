@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="Blockchain Decision Dashboard", layout="wide")
 
 # -----------------------------
-# LOAD DATA (API + FALLBACK SAFE)
+# LOAD DATA (SAFE API + FALLBACK)
 # -----------------------------
 @st.cache_data
 def load_data():
@@ -15,29 +15,14 @@ def load_data():
 
     try:
         res = requests.get(url, params=params, timeout=10)
-
-        if res.status_code != 200:
-            raise Exception("API failed")
-
         data = res.json()
-
-        if not isinstance(data, list):
-            raise Exception("Invalid response")
-
         df = pd.DataFrame(data)
 
-        cols = [
+        return df[[
             "name","current_price","market_cap",
             "total_volume","price_change_percentage_24h","image"
-        ]
-
-        if not all(col in df.columns for col in cols):
-            raise Exception("Missing columns")
-
-        return df[cols]
-
+        ]]
     except:
-        # fallback (never crash)
         return pd.DataFrame([
             ["Ethereum",1800,200000000000,10000000000,2.5,"https://cryptologos.cc/logos/ethereum-eth-logo.png"],
             ["Bitcoin",30000,600000000000,20000000000,1.2,"https://cryptologos.cc/logos/bitcoin-btc-logo.png"],
@@ -51,16 +36,12 @@ def load_data():
 
 df = load_data()
 
-if df.empty:
-    st.error("No data available")
-    st.stop()
-
 # -----------------------------
-# EXTRA INFO (SMART CONTRACT + WALLET + USE CASE)
+# EXTRA INFO
 # -----------------------------
 info = {
     "Ethereum": ["Yes","MetaMask","Apps & DeFi"],
-    "Bitcoin": ["No","Basic Wallet","Digital Money"],
+    "Bitcoin": ["No","Bitcoin Wallet","Digital Money"],
     "Solana": ["Yes","Phantom","Fast Apps"],
     "Cardano": ["Yes","Daedalus","Secure Apps"],
     "Polygon": ["Yes","MetaMask","Scaling"]
@@ -71,30 +52,29 @@ df["Wallet"] = df["name"].map(lambda x: info.get(x,["Yes","Generic","General"])[
 df["Use"] = df["name"].map(lambda x: info.get(x,["Yes","Generic","General"])[2])
 
 # -----------------------------
+# WALLET IMAGE MAP (FIXED)
+# -----------------------------
+wallet_images = {
+    "MetaMask": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
+    "Phantom": "https://cryptologos.cc/logos/phantom-wallet.png",
+    "Daedalus": "https://cryptologos.cc/logos/cardano-ada-logo.png",
+    "Bitcoin Wallet": "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
+    "Generic": "https://cdn-icons-png.flaticon.com/512/2830/2830284.png"
+}
+
+# -----------------------------
 # TITLE
 # -----------------------------
 st.title("🚀 Blockchain Comparison Dashboard")
 
-st.info("""
-This tool helps you compare blockchains using real data:
-- Market Cap → Trust & popularity  
-- Volume → Activity  
-- Smart Contracts → App capability  
-""")
-
 # -----------------------------
-# SELECT BLOCKCHAINS
+# SELECT
 # -----------------------------
-selected = st.multiselect(
-    "Select Blockchains to Compare",
-    df["name"],
-    default=list(df["name"][:3])
-)
-
+selected = st.multiselect("Select Blockchains", df["name"], default=list(df["name"][:3]))
 df_sel = df[df["name"].isin(selected)]
 
 # -----------------------------
-# CARDS UI
+# OVERVIEW CARDS
 # -----------------------------
 st.subheader("🔍 Overview")
 
@@ -104,124 +84,97 @@ for i, row in df_sel.iterrows():
     with cols[i % len(df_sel)]:
         st.image(row["image"], width=70)
         st.markdown(f"### {row['name']}")
-        st.write(f"💰 Price: ${row['current_price']}")
-        st.write(f"📊 Market Cap: {row['market_cap']:,}")
-        st.write(f"📈 24h Change: {row['price_change_percentage_24h']:.2f}%")
-        st.progress(min(row["total_volume"]/1e10,1.0))
+        st.write(f"💰 ${row['current_price']}")
+        st.write(f"📊 Cap: {row['market_cap']:,}")
+        st.write(f"📈 {row['price_change_percentage_24h']:.2f}%")
 
 # -----------------------------
-# SIDE BY SIDE COMPARISON
+# COMPARISON
 # -----------------------------
-st.subheader("📊 Detailed Comparison")
-
+st.subheader("📊 Comparison Table")
 st.dataframe(df_sel.set_index("name"), use_container_width=True)
 
 # -----------------------------
 # GRAPH
 # -----------------------------
-st.subheader("📊 Market Cap Comparison")
-
 fig = px.bar(df_sel, x="name", y="market_cap", color="name")
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# SMART CONTRACT VISUAL (REAL)
+# SMART CONTRACT VISUAL
 # -----------------------------
-st.subheader("📜 Smart Contract Working")
+st.subheader("📜 Smart Contract Flow")
 
 for _, row in df_sel.iterrows():
-    st.markdown(f"### 🔗 {row['name']}")
-
     if row["SmartContracts"] == "Yes":
-        st.markdown("""
-        👤 User → 👛 Wallet → 📜 Smart Contract → ⛓️ Blockchain → ✅ Result  
-        
-        ✔ Executes automatically  
-        ✔ No middleman  
-        ✔ Used in apps, DeFi, NFTs  
-        """)
+        st.success(f"{row['name']} → Supports Smart Contracts (Apps, DeFi)")
     else:
-        st.markdown("""
-        👤 User → 💸 Transaction → ⛓️ Blockchain  
-        
-        ❌ No smart contracts  
-        ✔ Only payments supported  
-        """)
+        st.error(f"{row['name']} → No Smart Contracts (Only Payments)")
 
 # -----------------------------
-# WALLET SIMULATION (REALISTIC)
+# WALLET SIMULATION (FINAL FIXED)
 # -----------------------------
 st.subheader("👛 Wallet Simulation")
 
-wallet = st.selectbox("Choose Wallet", df_sel["Wallet"].unique())
+selected_chain = st.selectbox("Select Blockchain", df_sel["name"])
+wallet = df[df["name"] == selected_chain]["Wallet"].values[0]
 
-st.markdown(f"""
-### {wallet} Wallet Flow
+st.markdown(f"### 🔐 {wallet} Wallet")
 
-1. Connect Wallet  
-2. Enter Address  
-3. Enter Amount  
-4. Confirm  
-""")
+# SHOW CORRECT IMAGE
+st.image(wallet_images.get(wallet, wallet_images["Generic"]), width=120)
 
 address = st.text_input("Recipient Address", "0xABC123...")
 amount = st.number_input("Amount", min_value=1, value=10)
 
-if st.button("🔐 Send Transaction"):
-    st.info("Connecting to wallet...")
+if st.button("Send Transaction"):
+    st.info("Connecting wallet...")
     st.info("Signing transaction...")
     st.success(f"{amount} tokens sent via {wallet} ✅")
-
-# wallet image
-st.image(
-    "https://miro.medium.com/v2/resize:fit:1200/1*GzHcK8rXh9vDOMkMt2rt7A.png",
-    caption="Example Wallet Interface"
-)
 
 # -----------------------------
 # INSIGHTS
 # -----------------------------
-st.subheader("📊 Key Insights")
+st.subheader("📊 Insights")
 
-best_cap = df_sel.loc[df_sel["market_cap"].idxmax()]
-best_growth = df_sel.loc[df_sel["price_change_percentage_24h"].idxmax()]
+best = df_sel.loc[df_sel["market_cap"].idxmax()]
+growth = df_sel.loc[df_sel["price_change_percentage_24h"].idxmax()]
 
-st.success(f"🏆 Most Trusted: {best_cap['name']}")
-st.info(f"📈 Fastest Growing: {best_growth['name']}")
+st.success(f"🏆 Most Trusted: {best['name']}")
+st.info(f"📈 Fastest Growing: {growth['name']}")
 
 # -----------------------------
-# RECOMMENDATION ENGINE
+# RECOMMENDATION
 # -----------------------------
 st.subheader("🤖 Recommendation")
 
-goal = st.selectbox("Your Goal", ["Investment","Fast Growth","Apps/Smart Contracts"])
+goal = st.selectbox("Goal", ["Investment","Growth","Apps"])
 
-if st.button("Get Recommendation"):
+if st.button("Suggest Best"):
     if goal == "Investment":
-        best = df_sel.sort_values("market_cap", ascending=False).iloc[0]
-    elif goal == "Fast Growth":
-        best = df_sel.sort_values("price_change_percentage_24h", ascending=False).iloc[0]
+        res = df_sel.sort_values("market_cap", ascending=False).iloc[0]
+    elif goal == "Growth":
+        res = df_sel.sort_values("price_change_percentage_24h", ascending=False).iloc[0]
     else:
-        best = df_sel[df_sel["SmartContracts"]=="Yes"].iloc[0]
+        res = df_sel[df_sel["SmartContracts"]=="Yes"].iloc[0]
 
-    st.success(f"Best Choice: {best['name']}")
+    st.success(f"Best: {res['name']}")
 
 # -----------------------------
-# BEGINNER SUMMARY (VERY IMPORTANT)
+# BEGINNER SUMMARY
 # -----------------------------
-st.subheader("🧠 Simple Explanation (Beginner Friendly)")
+st.subheader("🧠 Simple Explanation")
 
 summaries = {
-    "Bitcoin": "💰 Digital gold. Best for storing money.",
-    "Ethereum": "🧠 Runs apps and smart contracts.",
-    "Solana": "⚡ Very fast and cheap transactions.",
-    "Cardano": "🔬 Secure and research-driven blockchain.",
-    "Polygon": "🚀 Makes Ethereum faster and cheaper."
+    "Bitcoin": "Digital gold → store money",
+    "Ethereum": "Runs apps & smart contracts",
+    "Solana": "Very fast blockchain",
+    "Cardano": "Secure & research-based",
+    "Polygon": "Makes Ethereum faster"
 }
 
 for _, row in df_sel.iterrows():
-    text = summaries.get(row["name"], "General blockchain platform.")
-    st.info(f"{row['name']} → {text}")
+    st.info(f"{row['name']} → {summaries.get(row['name'], 'General blockchain')}")
 
 # -----------------------------
 # DARK MODE
